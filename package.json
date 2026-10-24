@@ -1,0 +1,10 @@
+{
+  "name": "brownie-diario",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Diario de salud de Brownie: web estática + función /api/chat (Gemini) + Supabase",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node test/chat.test.mjs" },
+  "dependencies": { "@google/genai": "^2.30.0" }
+}
