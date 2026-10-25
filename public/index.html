@@ -221,6 +221,19 @@ body{padding-block:16px 104px}
 .ditem .dq small{display:block;font:400 12px var(--f-body);color:var(--ink-2)}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
+.todo{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.todo:first-child{border-top:0}
+.tdchk{padding:6px;border-radius:8px}
+.tdt{flex:1;min-width:0;display:flex;flex-direction:column;padding-top:4px;overflow-wrap:anywhere}
+.tdt small{font-size:12px;color:var(--ink-2)}
+.tdt small.late{color:var(--crit);font-weight:600}
+.todo.done .tdt span{text-decoration:line-through;color:var(--ink-2)}
+.tdx{flex:none;width:30px;height:30px;font-size:20px;line-height:1;color:var(--ink-2);background:none;border:0;border-radius:8px}
+.tdform{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.tdform input{height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+.tdform input[type=text]{flex:1 1 200px;min-width:0}
+.tdform input[type=date]{flex:0 1 150px}
+.tdone summary{margin-top:6px;font-size:13px;color:var(--ink-2);cursor:pointer}
 .wgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 @media (min-width:640px){.wgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .wi{display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px;padding:5px 6px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
@@ -354,6 +367,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     </header>
     <section class="ledger" id="today" aria-label="Resumen de hoy"></section>
     <section class="card" id="dosesToday" aria-label="Medicinas de hoy" hidden></section>
+    <section class="card" id="todos" aria-label="Pendientes"></section>
     <section class="sec"><h2 class="sect">Accesos rápidos</h2><div class="qgrid" id="quick"></div></section>
     <p class="card hint">Cuéntale a Claude lo que pasó con Brownie, en la pestaña Chat o en la conversación de Claude, y aparece aquí. En “Medicinas de hoy” puedes marcar tú misma cada dosis.</p>
   </div>
@@ -892,7 +906,84 @@ h1{font-weight:700;letter-spacing:-.02em}
     }
     v.replaceChildren(views[tab]());
   }
-  function renderAll() { renderHero(); renderToday(); renderDoses(); renderScreen(); }
+  /* ---------- pendientes ---------- */
+  function todoList() { return entries.filter(function (e) { return e.type === 'other' && det(e).kind === 'todo'; }); }
+  function todoDoneOf(todo) { return entries.filter(function (e) { return e.type === 'other' && det(e).kind === 'todo-done' && det(e).ref === todo.id; }); }
+  var todoBusy = false, todoBuilt = false, todoListBox = null;
+  async function addTodo(text, due) {
+    if (!col || !canWrite || todoBusy) return false;
+    text = String(text).trim(); if (!text) return false;
+    todoBusy = true;
+    try {
+      var now = new Date(), t = todayStr(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+      await col.add({type:'other', date:t, time:tm, title:text, detail:isDate(due) ? {kind:'todo', due:due} : {kind:'todo'}, note:'', alert:'', raw:'Pendiente escrito en la página', createdAt:Date.now(), at:t + 'T' + tm});
+      toast('Pendiente agregado'); return true;
+    } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); return false; }
+    finally { todoBusy = false; }
+  }
+  async function toggleTodo(todo) {
+    if (!col || !canWrite || todoBusy) return;
+    todoBusy = true;
+    try {
+      var done = todoDoneOf(todo);
+      if (done.length) { for (var i = 0; i < done.length; i++) await col.doc(done[i].id).delete(); toast('Pendiente reabierto'); }
+      else {
+        var now = new Date(), t = todayStr(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+        await col.add({type:'other', date:t, time:tm, title:'Hecho: ' + todo.title, detail:{kind:'todo-done', ref:todo.id}, note:'', alert:'', raw:'Marcado en la página', createdAt:Date.now(), at:t + 'T' + tm});
+        toast('Pendiente listo');
+      }
+    } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
+    finally { todoBusy = false; }
+  }
+  async function removeTodo(todo) {
+    if (!col || !canWrite || todoBusy) return;
+    if (!window.confirm('¿Quitar este pendiente?\n' + todo.title)) return;
+    todoBusy = true;
+    try {
+      var done = todoDoneOf(todo);
+      for (var i = 0; i < done.length; i++) await col.doc(done[i].id).delete();
+      await col.doc(todo.id).delete(); toast('Pendiente quitado');
+    } catch (e) { toast('No se pudo quitar. Intenta otra vez.'); }
+    finally { todoBusy = false; }
+  }
+  function todoRow(todo, done) {
+    var d = det(todo), due = isDate(d.due) ? d.due : '', when = '', late = false;
+    if (due && !done) {
+      var n = dayDiff(todayStr(), due); late = n < 0;
+      when = n === 0 ? 'hoy' : n === 1 ? 'mañana' : n < 0 ? 'venció ' + sinceText({date:due}) : 'en ' + n + ' días';
+      when = fmtShort(due) + ' · ' + when;
+    } else if (due) when = fmtShort(due);
+    return h('div', {class:'todo' + (done ? ' done' : '')},
+      h('button', {class:'slot tdchk' + (done ? ' on' : ''), type:'button', 'aria-pressed': String(done), 'aria-label':(done ? 'Reabrir: ' : 'Marcar hecho: ') + todo.title, disabled: !canWrite, onclick:function () { toggleTodo(todo); }}, h('span', {class:'tick'})),
+      h('div', {class:'tdt'}, h('span', null, todo.title), when ? h('small', {class:late ? 'late' : ''}, when) : null),
+      h('button', {class:'tdx', type:'button', 'aria-label':'Quitar pendiente', title:'Quitar', disabled: !canWrite, onclick:function () { removeTodo(todo); }}, '×'));
+  }
+  function renderTodos() {
+    var box = $('todos'); if (!box) return;
+    if (!todoBuilt) {
+      todoBuilt = true;
+      todoListBox = h('div', {class:'tdlist'});
+      var txt = h('input', {type:'text', placeholder:'Nuevo pendiente, por ejemplo: cita de vacunación', 'aria-label':'Nuevo pendiente', maxlength:'140'});
+      var dt = h('input', {type:'date', 'aria-label':'Fecha (opcional)'});
+      var go = h('button', {class:'plus', type:'button', 'aria-label':'Agregar pendiente'}); go.appendChild(svgIcon('plus'));
+      var send = async function () { if (await addTodo(txt.value, dt.value)) { txt.value = ''; dt.value = ''; } };
+      go.addEventListener('click', send);
+      txt.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+      box.replaceChildren(h('h2', {class:'sect', style:'margin:0 0 8px'}, 'Pendientes'), todoListBox,
+        h('div', {class:'tdform'}, txt, dt, go));
+    }
+    var all = todoList(), open = [], closed = [];
+    all.forEach(function (e) { (todoDoneOf(e).length ? closed : open).push(e); });
+    open.sort(function (a, b) { var da = det(a).due || '9999', db = det(b).due || '9999'; return da.localeCompare(db) || (a.createdAt || 0) - (b.createdAt || 0); });
+    closed.sort(byDesc);
+    var kids = [];
+    if (!open.length) kids.push(h('p', {class:'hint'}, closed.length ? 'No hay pendientes abiertos.' : 'Aún no hay pendientes. Anota aquí lo que tienes que organizar, como la cita de vacunación.'));
+    open.forEach(function (e) { kids.push(todoRow(e, false)); });
+    if (closed.length) kids.push(h('details', {class:'tdone'}, h('summary', null, 'Hechos (' + closed.length + ')'), closed.slice(0, 20).map(function (e) { return todoRow(e, true); })));
+    todoListBox.replaceChildren.apply(todoListBox, kids);
+  }
+
+  function renderAll() { renderHero(); renderToday(); renderDoses(); renderTodos(); renderScreen(); }
 
   /* ---------- tratamiento, dosis y "hace cuánto" ---------- */
   function isPlan(e) { return e.type === 'med' && det(e).kind === 'plan'; }
@@ -1572,7 +1663,7 @@ h1{font-weight:700;letter-spacing:-.02em}
       if (!db) { col = null; renderScreen(); return; }
       col = db.collection('entries');
       var wp = user && user.can ? Promise.resolve(user.can('data.write')).catch(function () { return null; }) : Promise.resolve(null);
-      wp.then(function (ok) { canWrite = ok !== false; renderDoses(); renderScreen(); });
+      wp.then(function (ok) { canWrite = ok !== false; renderDoses(); renderTodos(); renderScreen(); });
       col.orderBy('at', 'desc').limit(600).onSnapshot(function (snap) {
         entries = snap.docs.map(function (d) { return Object.assign({id:d.id}, d.data()); });
         loaded = true; renderAll();
