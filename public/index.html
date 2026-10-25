@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Diario de Brownie</title>
+<title>Brownie's Assistant</title>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
@@ -392,7 +392,7 @@ body{background-image:none;font-feature-settings:"lnum" 1}
 h1,h2,h3{font-weight:500}
 .card,.tile,.qk,.ftile,.wday,.back,.mhead .me,.gridwrap,.composer>div,.empty{border:1px solid var(--line);box-shadow:none}
 .card{padding:18px 20px}
-h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
+h1{font:500 clamp(36px,10vw,54px)/1 var(--f-display);letter-spacing:-.03em}
 .eyebrow{font:500 11px/1 var(--f-body);letter-spacing:.22em;color:var(--ink-2)}
 
 /* Cabecera con guiño sal y pimienta */
@@ -492,7 +492,7 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
       <button class="avatar" id="avatar" type="button" aria-label="Mi perro"></button>
       <div>
         <p class="eyebrow">Diario de salud</p>
-        <h1>Brownie</h1>
+        <h1>Brownie's Assistant</h1>
         <div class="pchips" id="pchips"></div>
       </div>
       <p class="now" id="nowLabel"></p>
@@ -963,7 +963,7 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
   var CHAT_KEY = 'brownie_chat_v1';
   try { var saved = JSON.parse(localStorage.getItem(CHAT_KEY) || 'null'); if (saved && Array.isArray(saved.log)) { chatLog = saved.log.slice(-40); chatTurns = (saved.turns || []).slice(-12); } } catch (e) {}
   function persistChat() { try { localStorage.setItem(CHAT_KEY, JSON.stringify({log:chatLog.slice(-40), turns:chatTurns.slice(-12)})); } catch (e) {} }
-  var CHAT_RULES = 'Eres el asistente del diario de salud de Brownie, la perra de Kim (Lima, Perú). Hablas en español, cálido y breve. Tu trabajo es conversar con Kim y registrar en el diario lo que ella cuente, usando la herramienta save_entry. ' +
+  var CHAT_RULES = 'Eres Brownie\'s Assistant, el asistente del diario de salud de Brownie, la perra de Kim (Lima, Perú). Hablas en español, cálido y breve. Tu trabajo es conversar con Kim y registrar en el diario lo que ella cuente, usando la herramienta save_entry. ' +
     'REGLAS: (1) Registra solo lo que Kim dijo; nunca inventes valores ni fechas. (2) Si falta un dato esencial, haz UNA pregunta corta antes de guardar: medicina sin nombre o dosis, examen sin nombre o fecha, popó sin consistencia, comida sin saber qué fue. Si ella ya dio todo, guarda sin preguntar. (3) Fecha y hora: usa los de hoy (abajo) salvo que ella diga otra; hora en formato HH:MM, vacía si no se sabe. (4) No diagnostiques ni cambies dosis. Si hay sangre en la popó, vómitos repetidos, decaimiento fuerte o algo parecido, ponlo en alert (frase corta) y sugiere llamar a la veterinaria. (5) Después de guardar, confirma en una frase lo guardado. (6) Si solo pregunta algo (por ejemplo cómo va el peso o qué examen sigue), responde con los datos del contexto, sin guardar nada. (7) No repitas un registro que ya existe en el contexto. ' +
     'FORMATO de save_entry: type uno de poop, food, mood, med, exam, symptom, weight, vet, other. detail es un objeto con valores cortos. poop: consistency, color, blood (true/false), mucus (true/false), count. food: what, amount, appetite. mood: level 1 a 5. med: name, dose, frequency; para una dosis dada hoy usa kind "dose" (así queda marcada en Medicinas de hoy). exam: status (pendiente, realizado o resultado), lab, result. weight: kg. vet: status, clinic, reason. Textos largos van en note. title es corto (por ejemplo "Popó blanda"). raw es la frase de Kim tal cual. ' +
     'Porciones de la dieta: si Kim dice que dio la porción N de la ración, guarda type food con detail {what:"Ración de la dieta natural", amount:"1/4 de la ración diaria", meal:N}. Cambios del plan de la nutricionista: no los guardes como nota ni como registro; dile a Kim que los cambie en Comida, en “Editar cantidades del plan”. Checklist de alimentos: si dio un alimento del plan, guarda type other, title con el nombre del alimento y detail {kind:"check", item:"<id del plan>", what:"<nombre>"}. Si el alimento se mide en gramos o claras y Kim dice cuánto dio, agrega given con ese número (por ejemplo given:60); cada registro suma a lo que ya dio hoy.';
