@@ -221,16 +221,18 @@ body{padding-block:16px 104px}
 .ditem .dq small{display:block;font:400 12px var(--f-body);color:var(--ink-2)}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
-.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.wgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 @media (min-width:1000px){.wgrid{grid-template-columns:repeat(7,minmax(0,1fr))}}
 .wmeas{display:flex;flex-direction:column;gap:4px}
-.wamt{display:flex;align-items:center;gap:6px;padding:0 4px 0 30px;font:400 12px var(--f-mono);color:var(--ink-2)}
-.wamt input{width:52px;padding:4px 6px;font:500 13px var(--f-mono);text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
-.wday{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-content:start}
+.wamt{display:flex;align-items:center;gap:4px;padding:0 2px 0 4px;font:400 12px var(--f-mono);color:var(--ink-2)}
+.wamt input{width:46px;min-width:0;padding:4px 6px;font:500 13px var(--f-mono);text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.wday{display:flex;flex-direction:column;gap:5px;padding:6px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-content:start}
 .wday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .wh{display:flex;flex-direction:column;padding:2px 2px 4px}
 .wh small{font-size:12px;color:var(--ink-2);text-transform:capitalize}
-.wbox{width:100%;align-items:flex-start;padding:7px 8px;gap:7px;font-size:13px;text-align:left}
+.wbox{width:100%;align-items:flex-start;padding:6px;gap:5px;font-size:12px;line-height:1.25;text-align:left}
+.wbox .tick{width:16px;height:16px;margin-top:1px}
+.wbox.on .tick::after{left:3px;top:-1px}
 .wbox .wn{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
 .wbox .wn small{font:400 11px var(--f-mono);color:var(--ink-2)}
 .fhead{display:flex;align-items:center;gap:16px}
