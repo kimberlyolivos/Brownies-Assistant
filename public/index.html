@@ -354,7 +354,6 @@ h1{font-weight:700;letter-spacing:-.02em}
     </header>
     <section class="ledger" id="today" aria-label="Resumen de hoy"></section>
     <section class="card" id="dosesToday" aria-label="Medicinas de hoy" hidden></section>
-    <section class="card" id="mealsToday" aria-label="Ración de hoy" hidden></section>
     <section class="ledger" id="recent" aria-label="Hace cuánto fue lo último" hidden></section>
     <section class="sec"><h2 class="sect">Accesos rápidos</h2><div class="qgrid" id="quick"></div></section>
     <p class="card hint">Cuéntale a Claude lo que pasó con Brownie, en la pestaña Chat o en la conversación de Claude, y aparece aquí. En “Medicinas de hoy” puedes marcar tú misma cada dosis.</p>
@@ -894,7 +893,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     }
     v.replaceChildren(views[tab]());
   }
-  function renderAll() { renderHero(); renderToday(); renderRecent(); renderDoses(); renderMeals(); renderScreen(); }
+  function renderAll() { renderHero(); renderToday(); renderRecent(); renderDoses(); renderScreen(); }
 
   /* ---------- tratamiento, dosis y "hace cuánto" ---------- */
   function isPlan(e) { return e.type === 'med' && det(e).kind === 'plan'; }
@@ -1014,11 +1013,6 @@ h1{font-weight:700;letter-spacing:-.02em}
       perTxt ? h('p', {class:'per'}, h('b', null, 'Cada porción: '), perTxt + '.') : null,
       det_,
       h('p', {class:'hint', style:'margin-top:10px'}, 'Plan de la nutricionista del ' + fmtYmd(pe.date) + '. Pesos en cocido; la ración diaria se divide entre las porciones.'));
-  }
-  function renderMeals() {
-    var box = $('mealsToday'), c = dietCard(false);
-    if (!c) { box.hidden = true; box.replaceChildren(); return; }
-    box.hidden = false; box.replaceChildren(c);
   }
 
   function latestOf(fn) {
@@ -1599,7 +1593,7 @@ h1{font-weight:700;letter-spacing:-.02em}
       if (!db) { col = null; renderScreen(); return; }
       col = db.collection('entries');
       var wp = user && user.can ? Promise.resolve(user.can('data.write')).catch(function () { return null; }) : Promise.resolve(null);
-      wp.then(function (ok) { canWrite = ok !== false; renderDoses(); renderMeals(); renderScreen(); });
+      wp.then(function (ok) { canWrite = ok !== false; renderDoses(); renderScreen(); });
       col.orderBy('at', 'desc').limit(600).onSnapshot(function (snap) {
         entries = snap.docs.map(function (d) { return Object.assign({id:d.id}, d.data()); });
         loaded = true; renderAll();
