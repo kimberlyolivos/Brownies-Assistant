@@ -354,7 +354,6 @@ h1{font-weight:700;letter-spacing:-.02em}
     </header>
     <section class="ledger" id="today" aria-label="Resumen de hoy"></section>
     <section class="card" id="dosesToday" aria-label="Medicinas de hoy" hidden></section>
-    <section class="ledger" id="recent" aria-label="Hace cuánto fue lo último" hidden></section>
     <section class="sec"><h2 class="sect">Accesos rápidos</h2><div class="qgrid" id="quick"></div></section>
     <p class="card hint">Cuéntale a Claude lo que pasó con Brownie, en la pestaña Chat o en la conversación de Claude, y aparece aquí. En “Medicinas de hoy” puedes marcar tú misma cada dosis.</p>
   </div>
@@ -893,7 +892,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     }
     v.replaceChildren(views[tab]());
   }
-  function renderAll() { renderHero(); renderToday(); renderRecent(); renderDoses(); renderScreen(); }
+  function renderAll() { renderHero(); renderToday(); renderDoses(); renderScreen(); }
 
   /* ---------- tratamiento, dosis y "hace cuánto" ---------- */
   function isPlan(e) { return e.type === 'med' && det(e).kind === 'plan'; }
@@ -1031,25 +1030,6 @@ h1{font-weight:700;letter-spacing:-.02em}
     var dd = dayDiff(e.date, todayStr());
     return dd === 0 ? 'hoy' : dd === 1 ? 'ayer' : 'hace ' + dd + ' días';
   }
-  function renderRecent() {
-    var box = $('recent');
-    if (!entries.length) { box.hidden = true; return; }
-    box.hidden = false;
-    function cell(k, e, sub) {
-      return h('div', null, h('span', {class:'k'}, k), h('span', {class:'v sm'}, sinceText(e)),
-        h('span', {class:'s'}, e ? (sub || '') : 'sin registros'));
-    }
-    var lp = latestOf(function (e) { return e.type === 'poop'; });
-    var lf = latestOf(function (e) { return e.type === 'food' && det(e).status !== 'plan'; });
-    var ld = latestOf(isDose);
-    var lm = latestOf(function (e) { return e.type === 'mood'; });
-    box.replaceChildren(
-      cell('Última popó', lp, lp && det(lp).consistency),
-      cell('Última comida', lf, lf && (det(lf).what || lf.title)),
-      cell('Última dosis', ld, ld && ld.title),
-      cell('Último ánimo', lm, lm && num(det(lm).level) != null ? det(lm).level + '/5' : ''));
-  }
-
   /* ---------- gráficos ---------- */
   function lineChart(points, o) {
     var W = 640, H = 210, L = 38, R = 18, T = 20, B = 28, n = points.length;
@@ -1582,7 +1562,6 @@ h1{font-weight:700;letter-spacing:-.02em}
   function init() {
     $('nowLabel').textContent = cap(new Intl.DateTimeFormat('es', {weekday:'long', day:'numeric', month:'long', year:'numeric'}).format(new Date()));
     renderHero(); renderToday(); renderScreen();
-    setInterval(renderRecent, 60000);
     var c = window.claude;
     function use(n) { return c && c.use ? Promise.resolve(c.use(n)).catch(function () { return null; }) : Promise.resolve(null); }
     Promise.all([use('db'), use('user'), use('downloads'), use('sample')]).then(function (r) {
