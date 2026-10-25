@@ -221,6 +221,14 @@ body{padding-block:16px 104px}
 .ditem .dq small{display:block;font:400 12px var(--f-body);color:var(--ink-2)}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
+.wgrid{display:grid;grid-template-columns:repeat(7,minmax(112px,1fr));gap:8px;overflow-x:auto;padding-bottom:6px}
+.wday{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-content:start}
+.wday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.wh{display:flex;flex-direction:column;padding:2px 2px 4px}
+.wh small{font-size:12px;color:var(--ink-2);text-transform:capitalize}
+.wbox{width:100%;align-items:flex-start;padding:7px 8px;gap:7px;font-size:13px;text-align:left}
+.wbox .wn{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.wbox .wn small{font:400 11px var(--f-mono);color:var(--ink-2)}
 .fhead{display:flex;align-items:center;gap:16px}
 .ring{flex:none;width:84px;height:84px;position:relative}
 .ring svg{width:84px;height:84px;transform:rotate(-90deg)}
@@ -1122,108 +1130,61 @@ h1{font-weight:700;letter-spacing:-.02em}
     var done = daily.filter(function (x) { return itemDone(x, t, t); }).length;
     return {done:done, total:daily.length};
   }
-  var checkBusy = false, openFood = null, foodAmt = '';
-  function uLabel(x) { return x.unit === 'claras' ? 'claras' : 'g'; }
-  async function writeCheck(x, given) {
-    var now = new Date(), t = todayStr(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  var checkBusy = false;
+  async function writeCheck(x, given, date) {
+    var now = new Date(), t = date || todayStr(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes());
     var d = {kind:'check', item:x.id, what:x.name};
-    if (given != null) { d.given = given; d.amount = fmtNum(given) + ' ' + uLabel(x); } else d.amount = fmtQty(x.qty, x.unit);
+    if (given != null) { d.given = given; d.amount = fmtNum(given) + ' ' + (x.unit === 'claras' ? 'claras' : 'g'); } else d.amount = fmtQty(x.qty, x.unit);
     await col.add({type:'other', date:t, time:tm, title:x.name, detail:d, note:'', alert:'', raw:'Marcado en la página', createdAt:Date.now(), at:t + 'T' + tm});
   }
-  async function toggleCheck(x, cur) {
+  /* ---------- semana de 7 casilleros ---------- */
+  function weeklyCount(x) { var m = /(\d+)\s*(d[ií]as?|veces)/.exec(lower(x.freq)); return m ? Math.min(7, Number(m[1])) : 1; }
+  function seeded(str) { var n = 0; for (var i = 0; i < str.length; i++) n = (n * 31 + str.charCodeAt(i)) >>> 0; return function () { n = (n * 1664525 + 1013904223) >>> 0; return n / 4294967296; }; }
+  // Días al azar (fijos para esa semana) donde aparece un suplemento semanal; los días ya marcados siempre se respetan.
+  function weekSlots(x, days) {
+    var marked = days.filter(function (d) { return checksOf(x.id, d, d).length > 0; }), need = Math.max(weeklyCount(x), marked.length);
+    var rnd = seeded(days[0] + '|' + x.id), pool = days.filter(function (d) { return marked.indexOf(d) < 0; });
+    for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp; }
+    return marked.concat(pool.slice(0, need - marked.length));
+  }
+  async function toggleDay(x, d) {
     if (!col || !canWrite || checkBusy) return;
     checkBusy = true;
     try {
-      if (cur) { await col.doc(cur.id).delete(); toast(x.name + ' desmarcado'); }
-      else { await writeCheck(x, null); toast(x.name + ' marcado'); }
+      var list = checksOf(x.id, d, d);
+      if (list.length && itemDone(x, d, d)) { for (var i = 0; i < list.length; i++) await col.doc(list[i].id).delete(); toast(x.name + ' desmarcado'); }
+      else {
+        var rest = isMeas(x) ? Math.round(((num(x.qty) || 0) - givenOf(x, list)) * 10) / 10 : null;
+        await writeCheck(x, list.length && rest > 0 ? rest : null, d); toast(x.name + ' marcado');
+      }
     } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
     finally { checkBusy = false; }
   }
-  async function addGiven(x, amount) {
-    if (!col || !canWrite || checkBusy) return;
-    var n = Number(String(amount).replace(',', '.'));
-    if (!isFinite(n) || n <= 0 || n > 2000) { toast('Escribe una cantidad válida.'); return; }
-    checkBusy = true;
-    try { await writeCheck(x, Math.round(n * 10) / 10); foodAmt = ''; toast('Agregado ' + fmtNum(n) + ' ' + uLabel(x) + ' de ' + x.name.toLowerCase()); }
-    catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
-    finally { checkBusy = false; }
-  }
-  async function undoGiven(x) {
-    var t = todayStr(), l = checksOf(x.id, t, t).sort(byAsc), last = l[l.length - 1];
-    if (!last || !col || !canWrite || checkBusy) return;
-    checkBusy = true;
-    try { await col.doc(last.id).delete(); toast('Se quitó el último registro'); }
-    catch (e) { toast('No se pudo quitar. Intenta otra vez.'); }
-    finally { checkBusy = false; }
-  }
-  function foodTile(x, portions, weekly) {
-    var t = todayStr(), list = checksOf(x.id, t, t), cur = list[0], meas = isMeas(x), on = itemDone(x, t, t), gc = FGROUP[x.group] || '--ink-2';
-    var given = meas ? givenOf(x, list) : 0, qty = num(x.qty) || 0;
-    var perPortion = x.split && !isWeekly(x) ? fmtQty(x.qty / portions, x.unit) + ' por porción' : '';
-    var sub = [perPortion, x.note].filter(Boolean).join(' · ');
-    var wk = '';
-    if (weekly) {
-      var ws = weekStart(t), n = new Set(checksOf(x.id, ws, addDays(ws, 6)).map(function (e) { return e.date; })).size, tg = weeklyTarget(x);
-      wk = tg ? n + ' de ' + tg + ' esta semana' : n + ' esta semana';
-    }
-    var chk = document.createElement('span'); chk.className = 'chk';
-    chk.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.500l4.500 4.500L19 7.500"/></svg>';
-    var qtxt = meas ? (given > 0 ? fmtNum(given) + ' de ' + fmtNum(qty) + ' ' + uLabel(x) : fmtNum(qty) + ' ' + uLabel(x) + (x.split && !isWeekly(x) ? ' al día' : '')) : fmtQty(x.qty, x.unit);
-    var foot = meas && given > 0 && !on ? h('span', {class:'fw'}, 'faltan ' + fmtNum(Math.max(0, qty - given)) + ' ' + uLabel(x)) :
-      (weekly ? h('span', {class:'fw'}, wk) : (on && cur && cur.time ? h('span', {class:'fw'}, 'dado a las ' + cur.time) : null));
-    var bar = meas && given > 0 ? h('span', {class:'fbar'}, h('i', {style:'width:' + Math.min(100, given / qty * 100).toFixed(0) + '%'})) : null;
-    return h('button', {class:'ftile' + (on ? ' on' : '') + (openFood === x.id ? ' sel' : ''), type:'button', style:'--gc:var(' + gc + ')', 'aria-pressed': String(on), disabled: !canWrite,
-      'aria-label': x.name + ', ' + qtxt + (on ? ', completo hoy' : ''),
-      onclick:function () { if (meas) { openFood = openFood === x.id ? null : x.id; foodAmt = ''; renderScreen(); } else toggleCheck(x, cur); }},
-      chk, svgIcon(FICON[x.id] || 'foods', 'fic'),
-      h('span', {class:'fg'}, x.group),
-      h('span', {class:'fn'}, x.name),
-      h('span', {class:'fq'}, qtxt),
-      sub ? h('span', {class:'fs'}, sub) : null,
-      bar, foot);
-  }
-  function foodSheet(plan, portions) {
-    var x = openFood ? plan.items.filter(function (i) { return i.id === openFood; })[0] : null;
-    if (!x) return null;
-    var t = todayStr(), list = checksOf(x.id, t, t).sort(byAsc), given = givenOf(x, list), qty = num(x.qty) || 0, rest = Math.max(0, qty - given), u = uLabel(x);
-    var inp = h('input', {type:'text', inputmode:'decimal', placeholder:'Cantidad en ' + u, 'aria-label':'Cantidad dada en ' + u});
-    inp.value = foodAmt;
-    inp.addEventListener('input', function () { foodAmt = inp.value; });
-    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addGiven(x, foodAmt); } });
-    var per = x.split ? qty / portions : null;
-    var quick = [];
-    if (per && per < rest) quick.push(h('button', {class:'fchip', type:'button', onclick:function () { addGiven(x, per); }}, '+ 1 porción (' + fmtNum(per) + ' ' + u + ')'));
-    if (rest > 0) quick.push(h('button', {class:'fchip', type:'button', onclick:function () { addGiven(x, rest); }}, 'Completar (' + fmtNum(rest) + ' ' + u + ')'));
-    if (list.length) quick.push(h('button', {class:'fchip', type:'button', onclick:function () { undoGiven(x); }}, 'Deshacer el último'));
-    var hist = list.length ? list.map(function (e) { var g = num(det(e).given); return (e.time || '') + ' · ' + (g != null ? fmtNum(g) + ' ' + u : 'completo'); }).join('  ·  ') : 'Aún no se ha dado nada hoy.';
-    var go_ = h('button', {class:'plus', type:'button', 'aria-label':'Agregar', onclick:function () { addGiven(x, foodAmt); }}); go_.appendChild(svgIcon('plus'));
-    var cl = h('button', {class:'linkbtn', type:'button', onclick:function () { openFood = null; foodAmt = ''; renderScreen(); }}, 'Cerrar');
-    return h('div', {class:'composer sheet'}, h('div', {style:'flex-direction:column;align-items:stretch;gap:8px;padding:12px'},
-      h('div', {style:'display:flex;justify-content:space-between;gap:8px;align-items:baseline'}, h('b', null, x.name), cl),
-      h('div', {class:'hint'}, 'Dado hoy: ' + fmtNum(given) + ' de ' + fmtNum(qty) + ' ' + u + (rest > 0 ? ' · faltan ' + fmtNum(rest) : ' · completo')),
-      h('div', {style:'display:flex;gap:8px;align-items:center'}, inp, go_),
-      quick.length ? h('div', {class:'filters'}, quick) : null,
-      h('div', {class:'hint', style:'font-size:12px'}, hist)));
+  function weekGrid(plan) {
+    var t = todayStr(), ws = weekStart(t), days = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return addDays(ws, i); });
+    var daily = plan.items.filter(function (x) { return !isWeekly(x); }), weekly = plan.items.filter(isWeekly);
+    var slots = {}; weekly.forEach(function (x) { slots[x.id] = weekSlots(x, days); });
+    var cols = days.map(function (d, i) {
+      var items = daily.concat(weekly.filter(function (x) { return slots[x.id].indexOf(d) >= 0; }));
+      return h('div', {class:'wday' + (d === t ? ' today' : '')},
+        h('div', {class:'wh'}, h('b', null, 'Día ' + (i + 1)), h('small', null, new Intl.DateTimeFormat('es', {weekday:'short'}).format(parseYmd(d)).replace('.', '') + ' ' + fmtShort(d))),
+        items.map(function (x) {
+          var on = itemDone(x, d, d);
+          return h('button', {class:'slot wbox' + (on ? ' on' : ''), type:'button', 'aria-pressed': String(on), disabled: !canWrite,
+            title: x.name + ' · ' + fmtQty(x.qty, x.unit), onclick:function () { toggleDay(x, d); }},
+            h('span', {class:'tick'}), h('span', {class:'wn'}, x.name.replace(/ \(.*\)/, ''), h('small', null, fmtQty(x.qty, x.unit))));
+        }));
+    });
+    return h('div', {class:'wgrid'}, cols);
   }
   function viewFoods() {
     var pe = dietEntry(), plan = pe ? pe.plan : null;
     var kids = [];
     if (!plan) kids.push(empty('Aún no hay plan cargado', 'Cuando Claude cargue el plan de la nutricionista, aquí verás el checklist de lo que debe comer Brownie cada día.'));
     else {
-      var portions = Math.max(1, num(plan.portions) || 4), pr = foodProgress(), frac = pr.total ? pr.done / pr.total : 0;
-      var ring = document.createElement('div'); ring.className = 'ring';
-      ring.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="rb" cx="50" cy="50" r="40"/><circle class="rf" cx="50" cy="50" r="40" stroke-dasharray="' + (frac * 251.3).toFixed(1) + ' 251.3"/></svg><b>' + pr.done + '/' + pr.total + '</b>';
-      kids.push(h('section', {class:'card fhead'}, ring, h('div', null,
-        h('h3', null, pr.done === pr.total && pr.total ? '¡Todo listo por hoy!' : 'Checklist de hoy'),
-        h('p', null, 'Toca lo que se mide (en gramos) para anotar cuánto le diste y ver lo que falta. Lo demás se marca con un toque.'))));
-      var daily = plan.items.filter(function (x) { return !isWeekly(x); }), weekly = plan.items.filter(isWeekly);
-      kids.push(h('section', {class:'sec'}, h('h2', {class:'sect'}, 'Cada día'),
-        h('div', {class:'fgrid'}, daily.map(function (x) { return foodTile(x, portions, false); }))));
-      if (weekly.length) kids.push(h('section', {class:'sec'}, h('h2', {class:'sect'}, 'Varios días a la semana'),
-        h('div', {class:'fgrid'}, weekly.map(function (x) { return foodTile(x, portions, true); }))));
+      kids.push(h('p', {class:'hint'}, 'Toca un casillero para marcarlo; funciona en cualquier día de la semana. Los suplementos de pocas veces por semana caen en días al azar.'));
+      kids.push(weekGrid(plan));
       var avoid = plan.avoid || [];
-      var sheet = foodSheet(plan, portions);
-      if (sheet) { kids.push(h('div', {style:'height:230px'})); kids.push(sheet); }
       if (avoid.length) kids.push(h('section', {class:'card'}, h('h2', {class:'sect', style:'margin:0 0 6px;color:var(--crit)'}, 'Evitar'),
         avoid.map(function (a) { return h('div', {class:'ditem'}, h('div', {class:'dn'}, h('b', null, a.name), h('small', null, a.why))); })));
       kids.push(h('p', {class:'hint'}, 'Plan de la nutricionista del ' + fmtYmd(pe.date) + '. Si quieres probar un alimento nuevo, consúltalo con ella antes.'));
