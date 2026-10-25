@@ -221,7 +221,11 @@ body{padding-block:16px 104px}
 .ditem .dq small{display:block;font:400 12px var(--f-body);color:var(--ink-2)}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
-.wgrid{display:grid;grid-template-columns:repeat(7,minmax(112px,1fr));gap:8px;overflow-x:auto;padding-bottom:6px}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+@media (min-width:1000px){.wgrid{grid-template-columns:repeat(7,minmax(0,1fr))}}
+.wmeas{display:flex;flex-direction:column;gap:4px}
+.wamt{display:flex;align-items:center;gap:6px;padding:0 4px 0 30px;font:400 12px var(--f-mono);color:var(--ink-2)}
+.wamt input{width:52px;padding:4px 6px;font:500 13px var(--f-mono);text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
 .wday{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-content:start}
 .wday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .wh{display:flex;flex-direction:column;padding:2px 2px 4px}
@@ -752,7 +756,7 @@ h1{font-weight:700;letter-spacing:-.02em}
       return e.date + (e.time ? ' ' + e.time : '') + ' · ' + e.type + ' · ' + clip(e.title) + (old ? '' : (dd ? ' {' + dd + '}' : '') + (e.alert ? ' ALERTA: ' + clip(e.alert) : ''));
     });
     var plans = activePlans().map(function (p) { var d = det(p), done = dosesTodayFor(p).length; return clip(p.title) + ' ' + clip(d.dose) + ' ' + clip(d.frequency) + ' (' + done + ' de ' + perDay(p) + ' dosis hoy)'; });
-    var pe = dietEntry(), items = pe ? pe.plan.items.map(function (x) { return x.id + ' = ' + x.name + ' ' + fmtQty(x.qty, x.unit) + ' (' + x.freq + ')'; }) : [];
+    var pe = dietEntry(), items = pe ? planItems(pe.plan).items.map(function (x) { return x.id + ' = ' + x.name + ' ' + fmtQty(x.qty, x.unit) + ' (' + x.freq + ')'; }) : [];
     var ctx = 'HOY: ' + t + ' (' + fmtLong(t) + '), hora actual ' + tm + '.\nFICHA: Brownie, schnauzer estándar, 6 años, hembra esterilizada, colecistectomía en agosto de 2024, alergia reportada al pollo.\n' +
       'TRATAMIENTO ACTIVO:\n' + (plans.join('\n') || 'ninguno') + '\nPLAN DE ALIMENTOS (ids): \n' + (items.join('\n') || 'sin plan') +
       '\nREGISTROS (exámenes de siempre; resto últimos 14 días):\n' + lines.join('\n');
@@ -1124,9 +1128,27 @@ h1{font-weight:700;letter-spacing:-.02em}
     var l = checksOf(x.id, from, to);
     return isMeas(x) ? givenOf(x, l) >= (num(x.qty) || 0) - 0.001 : l.length > 0;
   }
+  // Pavita y pescado blanco se alternan: unos días uno, otros días el otro.
+  function planItems(plan) {
+    var items = plan.items.slice(), pavo = items.filter(function (x) { return x.id === 'pavo'; })[0] || items.filter(function (x) { return /pavo|pavita/.test(lower(x.name)) && !isWeekly(x); })[0];
+    var pesc = items.filter(function (x) { return x.id === 'pescado'; })[0];
+    if (!pavo || (pesc && pesc === pavo)) return {items:items, pavo:null, pesc:null};
+    if (!pesc) { pesc = {id:'pescado', group:pavo.group, name:'Pescado blanco', qty:pavo.qty, unit:pavo.unit, note:'en lugar de la pavita'}; items.push(pesc); }
+    var fixed = Object.assign({}, pesc, {freq: isWeekly(pesc) ? pesc.freq : '2 días a la semana'});
+    items = items.map(function (x) { return x === pesc ? fixed : x; });
+    return {items:items, pavo:pavo, pesc:fixed};
+  }
+  function weekDays(d) { var ws = weekStart(d); return [0, 1, 2, 3, 4, 5, 6].map(function (i) { return addDays(ws, i); }); }
+  function itemsForDay(plan, d, days) {
+    var pi = planItems(plan), alt = pi.pavo && pi.pesc, pescDays = alt ? weekSlots(pi.pesc, days) : [];
+    var daily = pi.items.filter(function (x) { return !isWeekly(x) && x !== pi.pavo; }), weekly = pi.items.filter(function (x) { return isWeekly(x) && x !== pi.pesc; });
+    if (alt) daily.unshift(pescDays.indexOf(d) >= 0 && !(checksOf(pi.pavo.id, d, d).length && !checksOf(pi.pesc.id, d, d).length) ? pi.pesc : pi.pavo);
+    else if (pi.pavo) daily.unshift(pi.pavo);
+    return {daily:daily, weekly:weekly.filter(function (x) { return weekSlots(x, days).indexOf(d) >= 0; })};
+  }
   function foodProgress() {
     var pe = dietEntry(); if (!pe) return null;
-    var t = todayStr(), daily = pe.plan.items.filter(function (x) { return !isWeekly(x); });
+    var t = todayStr(), daily = itemsForDay(pe.plan, t, weekDays(t)).daily;
     var done = daily.filter(function (x) { return itemDone(x, t, t); }).length;
     return {done:done, total:daily.length};
   }
@@ -1160,20 +1182,41 @@ h1{font-weight:700;letter-spacing:-.02em}
     } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
     finally { checkBusy = false; }
   }
+  async function setGiven(x, d, val) {
+    if (!col || !canWrite || checkBusy) return;
+    var txt = String(val).trim().replace(',', '.'), n = txt === '' ? 0 : Number(txt), cur = givenOf(x, checksOf(x.id, d, d));
+    if (!isFinite(n) || n < 0 || n > 2000) { toast('Escribe una cantidad válida.'); renderScreen(); return; }
+    n = Math.round(n * 10) / 10;
+    if (Math.abs(n - cur) < 0.05) return;
+    checkBusy = true;
+    try {
+      var list = checksOf(x.id, d, d);
+      for (var i = 0; i < list.length; i++) await col.doc(list[i].id).delete();
+      if (n > 0) await writeCheck(x, n, d);
+      toast(n > 0 ? x.name + ': ' + fmtNum(n) + ' ' + (x.unit === 'claras' ? 'claras' : 'g') : x.name + ' desmarcado');
+    } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
+    finally { checkBusy = false; }
+  }
+  function weekBox(x, d) {
+    var on = itemDone(x, d, d), meas = isMeas(x), u = x.unit === 'claras' ? 'claras' : 'g', qty = num(x.qty) || 0;
+    var btn = h('button', {class:'slot wbox' + (on ? ' on' : ''), type:'button', 'aria-pressed': String(on), disabled: !canWrite,
+      onclick:function () { toggleDay(x, d); }},
+      h('span', {class:'tick'}), h('span', {class:'wn'}, x.name.replace(/ \(.*\)/, ''), meas ? null : h('small', null, fmtQty(x.qty, x.unit))));
+    if (!meas) return btn;
+    var given = givenOf(x, checksOf(x.id, d, d));
+    var inp = h('input', {type:'text', inputmode:'decimal', placeholder:'0', 'aria-label':'Cantidad dada de ' + x.name + ' en ' + u, disabled: !canWrite});
+    inp.value = given > 0 ? fmtNum(given) : '';
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+    inp.addEventListener('change', function () { setGiven(x, d, inp.value); });
+    return h('div', {class:'wmeas'}, btn, h('label', {class:'wamt'}, inp, h('span', null, '/ ' + fmtNum(qty) + ' ' + u)));
+  }
   function weekGrid(plan) {
-    var t = todayStr(), ws = weekStart(t), days = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return addDays(ws, i); });
-    var daily = plan.items.filter(function (x) { return !isWeekly(x); }), weekly = plan.items.filter(isWeekly);
-    var slots = {}; weekly.forEach(function (x) { slots[x.id] = weekSlots(x, days); });
+    var t = todayStr(), days = weekDays(t);
     var cols = days.map(function (d, i) {
-      var items = daily.concat(weekly.filter(function (x) { return slots[x.id].indexOf(d) >= 0; }));
+      var it = itemsForDay(plan, d, days);
       return h('div', {class:'wday' + (d === t ? ' today' : '')},
         h('div', {class:'wh'}, h('b', null, 'Día ' + (i + 1)), h('small', null, new Intl.DateTimeFormat('es', {weekday:'short'}).format(parseYmd(d)).replace('.', '') + ' ' + fmtShort(d))),
-        items.map(function (x) {
-          var on = itemDone(x, d, d);
-          return h('button', {class:'slot wbox' + (on ? ' on' : ''), type:'button', 'aria-pressed': String(on), disabled: !canWrite,
-            title: x.name + ' · ' + fmtQty(x.qty, x.unit), onclick:function () { toggleDay(x, d); }},
-            h('span', {class:'tick'}), h('span', {class:'wn'}, x.name.replace(/ \(.*\)/, ''), h('small', null, fmtQty(x.qty, x.unit))));
-        }));
+        it.daily.concat(it.weekly).map(function (x) { return weekBox(x, d); }));
     });
     return h('div', {class:'wgrid'}, cols);
   }
@@ -1182,7 +1225,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     var kids = [];
     if (!plan) kids.push(empty('Aún no hay plan cargado', 'Cuando Claude cargue el plan de la nutricionista, aquí verás el checklist de lo que debe comer Brownie cada día.'));
     else {
-      kids.push(h('p', {class:'hint'}, 'Toca un casillero para marcarlo; funciona en cualquier día de la semana. Los suplementos de pocas veces por semana caen en días al azar.'));
+      kids.push(h('p', {class:'hint'}, 'Toca un casillero para marcarlo, en cualquier día de la semana. En lo que se pesa puedes escribir los gramos que le diste. La pavita y el pescado blanco se alternan, y los suplementos de pocas veces por semana caen en días al azar.'));
       kids.push(weekGrid(plan));
       var avoid = plan.avoid || [];
       if (avoid.length) kids.push(h('section', {class:'card'}, h('h2', {class:'sect', style:'margin:0 0 6px;color:var(--crit)'}, 'Evitar'),
