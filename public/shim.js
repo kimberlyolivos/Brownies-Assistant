@@ -27,12 +27,26 @@
   }
   function loginForm(msg) {
     var inp = el('input', {type:'email', placeholder:'tu-correo@ejemplo.com', required:'', autocomplete:'email'});
-    var info = el('p', {text: msg || 'Entra con tu correo. Te enviamos un enlace para ingresar, sin contraseña.'});
-    var f = el('form', {}, [el('h1', {text:"Brownie's Assistant"}), info, inp, el('button', {type:'submit', text:'Enviarme el enlace'})]);
+    var info = el('p', {text: msg || 'Entra con tu correo. Te enviamos un enlace y un código para ingresar, sin contraseña.'});
+    var btn = el('button', {type:'submit', text:'Enviarme el enlace'});
+    var f = el('form', {}, [el('h1', {text:"Brownie's Assistant"}), info, inp, btn]);
+    var code = el('input', {type:'text', inputmode:'numeric', autocomplete:'one-time-code', placeholder:'Código del correo', maxlength:'8'});
+    var enter = el('button', {type:'button', text:'Entrar con el código'});
+    code.style.display = enter.style.display = 'none';
+    f.appendChild(code); f.appendChild(enter);
+    enter.onclick = function () {
+      var t = code.value.trim(); if (!t) return;
+      enter.disabled = true;
+      sb.auth.verifyOtp({email: inp.value.trim(), token: t, type:'email'}).then(function (r) {
+        enter.disabled = false;
+        if (r.error) info.textContent = 'Ese código no sirve o ya venció. Pide uno nuevo.';
+      });
+    };
     f.onsubmit = function (ev) {
       ev.preventDefault();
       sb.auth.signInWithOtp({email: inp.value.trim(), options:{emailRedirectTo: location.origin + location.pathname}}).then(function (r) {
-        info.textContent = r.error ? 'No se pudo enviar el enlace. Revisa el correo e intenta otra vez.' : 'Listo. Revisa tu correo y abre el enlace desde este mismo dispositivo.';
+        info.textContent = r.error ? 'No se pudo enviar el enlace. Revisa el correo e intenta otra vez.' : 'Listo. Revisa tu correo: abre el enlace o escribe aquí el código que te llegó.';
+        if (!r.error) { code.style.display = enter.style.display = ''; code.focus(); }
       });
     };
     return f;

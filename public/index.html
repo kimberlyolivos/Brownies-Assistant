@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#F5F2EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B1815" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Brownie">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>Brownie's Assistant</title>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Figtree:wght@400;500;600;700&display=swap">
@@ -1890,6 +1899,10 @@ h1{font:500 clamp(36px,10vw,54px)/1 var(--f-display);letter-spacing:-.03em}
   }
 
   window.__chatSaved = function (list) { (list || []).forEach(function (x) { chatLog.push({who:'saved', text:/^(Editado|Eliminado|Plan actualizado)/.test(x.title) ? x.title : 'Guardado · ' + (TYPES[x.type] ? TYPES[x.type].label : x.type) + ' · ' + x.title}); }); persistChat(); };
+
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
 
   /* ---------- arranque ---------- */
   function init() {
