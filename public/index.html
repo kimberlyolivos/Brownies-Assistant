@@ -228,6 +228,12 @@ body{padding-block:16px 104px}
 .prow span{flex:0 0 52px;font-size:13px;color:var(--ink-2)}
 .pedit summary{cursor:pointer;font-weight:600}
 .pedit .btn{margin-top:10px}
+.eform{display:flex;flex-direction:column;gap:8px;min-width:0}
+.efield{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-2)}
+.efield input,.efield textarea{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px;min-width:0}
+.erow2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.echeck{display:flex;align-items:center;gap:8px;font-size:14px}
+.eform .foot{display:flex;align-items:center;gap:14px}
 .todo{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 .todo:first-child{border-top:0}
 .tdchk{padding:6px;border-radius:8px}
@@ -466,7 +472,7 @@ h1{font-weight:700;letter-spacing:-.02em}
   function hubOf(id) { return TOPTABS[id] && id !== 'home' ? id : (id === 'home' ? 'home' : 'cuidado'); }
 
   var entries = [], loaded = false, canWrite = true, col = null;
-  var tab = 'home', filters = new Set(), confirmId = null;
+  var tab = 'home', filters = new Set(), confirmId = null, editId = null, editDraft = null, editBusy = false;
   var sampleFn = null, toolsOk = false, chatLog = [], chatTurns = [], chatBusy = false, chatCtl = null, chatDraft = '', chatStream = '';
   var labGroup = 'Bioquímica', labParam = 'ALT (TGP)', dl = null;
 
@@ -552,8 +558,10 @@ h1{font-weight:700;letter-spacing:-.02em}
             h('button', {class:'linkbtn danger', type:'button', onclick:function () { removeEntry(e.id); }}, 'Sí, eliminar'),
             h('button', {class:'linkbtn', type:'button', onclick:function () { confirmId = null; renderView(); }}, 'Cancelar'))
         : h('div', {class:'foot'},
+            h('button', {class:'linkbtn', type:'button', onclick:function () { startEdit(e); }}, 'Editar'),
             h('button', {class:'linkbtn', type:'button', onclick:function () { confirmId = e.id; renderView(); }}, 'Eliminar'));
     }
+    if (canWrite && e.id && editId === e.id && editDraft) return editNode(e, t);
     return h('li', {class:'entry t-' + t},
       h('span', {class:'time'}, timeText), h('span', {class:'dot'}),
       h('div', null,
@@ -564,6 +572,69 @@ h1{font-weight:700;letter-spacing:-.02em}
         foot));
   }
 
+  /* ---------- editar un registro ---------- */
+  var NO_EDIT = {kind:1, item:1, ref:1, given:1, meal:1};
+  function startEdit(e) {
+    var d = det(e), dd = {};
+    Object.keys(d).forEach(function (k) { if (!NO_EDIT[k] && typeof d[k] !== 'object') dd[k] = d[k]; });
+    editId = e.id; confirmId = null;
+    editDraft = {date:e.date || '', time:e.time || '', title:e.title || '', note:e.note || '', alert:e.alert || '', detail:dd};
+    renderView();
+  }
+  function cancelEdit() { editId = null; editDraft = null; renderView(); }
+  async function saveEdit(e) {
+    if (!col || !canWrite || editBusy) return;
+    var dr = editDraft;
+    if (!isDate(dr.date)) { toast('Escribe una fecha válida.'); return; }
+    if (!dr.title.trim()) { toast('El título no puede estar vacío.'); return; }
+    var time = /^\d{2}:\d{2}$/.test(dr.time) ? dr.time : '', orig = det(e), detail = Object.assign({}, orig);
+    Object.keys(dr.detail).forEach(function (k) {
+      var v = dr.detail[k];
+      if (typeof orig[k] === 'boolean') detail[k] = !!v;
+      else if (typeof orig[k] === 'number') { var n = num(String(v).replace(',', '.')); if (String(v).trim() === '') delete detail[k]; else if (n != null) detail[k] = n; }
+      else if (String(v).trim() === '') delete detail[k]; else detail[k] = String(v).trim();
+    });
+    editBusy = true;
+    try {
+      await col.doc(e.id).update({date:dr.date, time:time, title:dr.title.trim(), note:dr.note.trim(), alert:dr.alert.trim(), detail:detail, at:dr.date + 'T' + (time || '00:00')});
+      editId = null; editDraft = null; toast('Registro actualizado');
+    } catch (err) { toast('No se pudo guardar. Intenta otra vez.'); }
+    finally { editBusy = false; renderView(); }
+  }
+  function editNode(e, t) {
+    var dr = editDraft;
+    function field(label, el) { return h('label', {class:'efield'}, h('span', null, label), el); }
+    function txt(get, set, attrs) {
+      var i = h('input', Object.assign({type:'text'}, attrs || {})); i.value = get();
+      i.addEventListener('input', function () { set(i.value); }); return i;
+    }
+    var rows = [
+      h('div', {class:'erow2'}, field('Fecha', txt(function () { return dr.date; }, function (v) { dr.date = v; }, {type:'date'})), field('Hora', txt(function () { return dr.time; }, function (v) { dr.time = v; }, {type:'time'}))),
+      field('Título', txt(function () { return dr.title; }, function (v) { dr.title = v; }, {maxlength:'120'}))
+    ];
+    var orig = det(e);
+    Object.keys(dr.detail).forEach(function (k) {
+      var label = DETAIL_LABELS[k] || (k === 'blood' ? 'Con sangre' : k === 'mucus' ? 'Con moco' : k);
+      if (typeof orig[k] === 'boolean') {
+        var c = h('input', {type:'checkbox'}); c.checked = !!dr.detail[k];
+        c.addEventListener('change', function () { dr.detail[k] = c.checked; });
+        rows.push(h('label', {class:'echeck'}, c, h('span', null, label)));
+      } else rows.push(field(label, txt(function () { return dr.detail[k]; }, function (v) { dr.detail[k] = v; }, {maxlength:'200'})));
+    });
+    var nt = h('textarea', {rows:'3', maxlength:'1500'}); nt.value = dr.note; nt.addEventListener('input', function () { dr.note = nt.value; });
+    rows.push(field('Nota', nt));
+    rows.push(field('Revisar (alerta)', txt(function () { return dr.alert; }, function (v) { dr.alert = v; }, {maxlength:'200'})));
+    return h('li', {class:'entry editing t-' + t},
+      h('span', {class:'time'}, '✎'), h('span', {class:'dot'}),
+      h('div', {class:'eform'}, rows,
+        h('div', {class:'foot'},
+          h('button', {class:'btn', type:'button', onclick:function () { saveEdit(e); }}, 'Guardar'),
+          h('button', {class:'linkbtn', type:'button', onclick:function () { cancelEdit(); }}, 'Cancelar'))));
+  }
+
+  function editLink(e) {
+    return canWrite && e.id ? h('button', {class:'linkbtn', type:'button', style:'margin-left:8px', onclick:function () { startEdit(e); }}, 'Editar') : null;
+  }
   function removeEntry(id) {
     confirmId = null;
     col.doc(id).delete().then(function () { toast('Registro eliminado'); }).catch(function () { toast('No se pudo eliminar'); renderView(); });
@@ -1449,7 +1520,8 @@ h1{font-weight:700;letter-spacing:-.02em}
     var t = todayStr(), w7 = addDays(t, -6), blocks = [];
     function doseList(mine) {
       return h('ul', null, mine.slice(0, 6).map(function (e) {
-        return h('li', null, fmtShort(e.date) + (e.time ? ' ' + e.time : '') + ' — ' + (det(e).dose || 'dosis no indicada'));
+        if (editId === e.id && editDraft) return h('ul', {class:'list'}, editNode(e, 'med'));
+        return h('li', null, fmtShort(e.date) + (e.time ? ' ' + e.time : '') + ' — ' + (det(e).dose || 'dosis no indicada'), editLink(e));
       }), mine.length > 6 ? h('li', null, '+ ' + (mine.length - 6) + ' anteriores') : null);
     }
     if (plans.length) blocks.push(h('section', {class:'group'},
@@ -1459,7 +1531,8 @@ h1{font-weight:700;letter-spacing:-.02em}
         var n7 = mine.filter(function (e) { return e.date >= w7; }).length;
         var bits = [d.dose, d.frequency].filter(Boolean).join(' · ');
         var until = isDate(d.until) ? ' · hasta ' + fmtShort(d.until) : '';
-        return h('div', {class:'med t-med'}, h('h3', null, p.title),
+        if (editId === p.id && editDraft) return h('div', {class:'med t-med'}, h('ul', {class:'list'}, editNode(p, 'med')));
+        return h('div', {class:'med t-med'}, h('h3', null, p.title, editLink(p)),
           h('p', {class:'meta'}, (bits || 'Sin dosis registrada') + until + ' · ' + plural(n7, 'toma marcada', 'tomas marcadas') + ' en 7 días'),
           mine.length ? doseList(mine) : h('p', {class:'meta'}, 'Aún no hay tomas marcadas. Se marcan en “Medicinas de hoy”, arriba.'));
       })));

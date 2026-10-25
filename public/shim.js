@@ -95,7 +95,10 @@
         });
       },
       doc: function (id) {
-        return {delete: function () { return sb.from('entries').delete().eq('id', id).then(function (r) { if (r.error) throw r.error; reloadAll(); }); }};
+        return {
+          delete: function () { return sb.from('entries').delete().eq('id', id).then(function (r) { if (r.error) throw r.error; reloadAll(); }); },
+          update: function (d) { return sb.from('entries').update(toRow(d)).eq('id', id).select('id').then(function (r) { if (r.error) throw r.error; if (!r.data || !r.data.length) throw new Error('sin cambios'); reloadAll(); }); }
+        };
       }
     };
     return q;
