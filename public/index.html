@@ -222,19 +222,18 @@ body{padding-block:16px 104px}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
 .wgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-@media (min-width:1000px){.wgrid{grid-template-columns:repeat(7,minmax(0,1fr))}}
-.wmeas{display:flex;flex-direction:column;gap:4px}
-.wamt{display:flex;align-items:center;gap:4px;padding:0 2px 0 4px;font:400 12px var(--f-mono);color:var(--ink-2)}
-.wamt input{width:46px;min-width:0;padding:4px 6px;font:500 13px var(--f-mono);text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+@media (min-width:640px){.wgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (min-width:1100px){.wgrid{grid-template-columns:repeat(7,minmax(0,1fr))}}
+.wi{display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px;padding:5px 6px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.wi.on{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--surface))}
+.wnm{flex:1 1 56px;min-width:0;padding:0;border:0;background:none;font:500 12px/1.25 var(--f-body);text-align:left;color:var(--ink);overflow-wrap:anywhere}
+.wnm:disabled{cursor:default}
+.wamt{display:flex;align-items:center;gap:4px;font:400 11px var(--f-mono);color:var(--ink-2);white-space:nowrap}
+.wamt input{width:40px;min-width:0;padding:3px 4px;font:500 13px var(--f-mono);text-align:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
 .wday{display:flex;flex-direction:column;gap:5px;padding:6px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;align-content:start}
 .wday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .wh{display:flex;flex-direction:column;padding:2px 2px 4px}
 .wh small{font-size:12px;color:var(--ink-2);text-transform:capitalize}
-.wbox{width:100%;align-items:flex-start;padding:6px;gap:5px;font-size:12px;line-height:1.25;text-align:left}
-.wbox .tick{width:16px;height:16px;margin-top:1px}
-.wbox.on .tick::after{left:3px;top:-1px}
-.wbox .wn{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
-.wbox .wn small{font:400 11px var(--f-mono);color:var(--ink-2)}
 .fhead{display:flex;align-items:center;gap:16px}
 .ring{flex:none;width:84px;height:84px;position:relative}
 .ring svg{width:84px;height:84px;transform:rotate(-90deg)}
@@ -1122,13 +1121,14 @@ h1{font-weight:700;letter-spacing:-.02em}
   function checksOf(item, from, to) {
     return entries.filter(function (e) { return e.type === 'other' && det(e).kind === 'check' && det(e).item === item && e.date >= from && e.date <= to; });
   }
-  function isMeas(x) { return x.unit === 'g' || x.unit === 'claras'; }
+  function isMeas(x) { return true; }
+  function unitName(x) { return x.unit === 'g' ? 'g' : (UNITS[x.unit] || x.unit || ''); }
   function givenOf(x, list) {
     return list.reduce(function (a, e) { var g = num(det(e).given); return a + (g != null ? g : (num(x.qty) || 0)); }, 0);
   }
   function itemDone(x, from, to) {
     var l = checksOf(x.id, from, to);
-    return isMeas(x) ? givenOf(x, l) >= (num(x.qty) || 0) - 0.001 : l.length > 0;
+    return l.some(function (e) { return num(det(e).given) != null; }) ? givenOf(x, l) >= (num(x.qty) || 0) - 0.001 : l.length > 0;
   }
   // Pavita y pescado blanco se alternan: unos días uno, otros días el otro.
   function planItems(plan) {
@@ -1158,7 +1158,7 @@ h1{font-weight:700;letter-spacing:-.02em}
   async function writeCheck(x, given, date) {
     var now = new Date(), t = date || todayStr(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes());
     var d = {kind:'check', item:x.id, what:x.name};
-    if (given != null) { d.given = given; d.amount = fmtNum(given) + ' ' + (x.unit === 'claras' ? 'claras' : 'g'); } else d.amount = fmtQty(x.qty, x.unit);
+    if (given != null) { d.given = given; d.amount = fmtNum(given) + ' ' + unitName(x); } else d.amount = fmtQty(x.qty, x.unit);
     await col.add({type:'other', date:t, time:tm, title:x.name, detail:d, note:'', alert:'', raw:'Marcado en la página', createdAt:Date.now(), at:t + 'T' + tm});
   }
   /* ---------- semana de 7 casilleros ---------- */
@@ -1195,22 +1195,19 @@ h1{font-weight:700;letter-spacing:-.02em}
       var list = checksOf(x.id, d, d);
       for (var i = 0; i < list.length; i++) await col.doc(list[i].id).delete();
       if (n > 0) await writeCheck(x, n, d);
-      toast(n > 0 ? x.name + ': ' + fmtNum(n) + ' ' + (x.unit === 'claras' ? 'claras' : 'g') : x.name + ' desmarcado');
+      toast(n > 0 ? x.name + ': ' + fmtNum(n) + ' ' + unitName(x) : x.name + ' desmarcado');
     } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
     finally { checkBusy = false; }
   }
   function weekBox(x, d) {
-    var on = itemDone(x, d, d), meas = isMeas(x), u = x.unit === 'claras' ? 'claras' : 'g', qty = num(x.qty) || 0;
-    var btn = h('button', {class:'slot wbox' + (on ? ' on' : ''), type:'button', 'aria-pressed': String(on), disabled: !canWrite,
-      onclick:function () { toggleDay(x, d); }},
-      h('span', {class:'tick'}), h('span', {class:'wn'}, x.name.replace(/ \(.*\)/, ''), meas ? null : h('small', null, fmtQty(x.qty, x.unit))));
-    if (!meas) return btn;
-    var given = givenOf(x, checksOf(x.id, d, d));
+    var on = itemDone(x, d, d), u = unitName(x), qty = num(x.qty) || 0, given = givenOf(x, checksOf(x.id, d, d));
     var inp = h('input', {type:'text', inputmode:'decimal', placeholder:'0', 'aria-label':'Cantidad dada de ' + x.name + ' en ' + u, disabled: !canWrite});
     inp.value = given > 0 ? fmtNum(given) : '';
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
     inp.addEventListener('change', function () { setGiven(x, d, inp.value); });
-    return h('div', {class:'wmeas'}, btn, h('label', {class:'wamt'}, inp, h('span', null, '/ ' + fmtNum(qty) + ' ' + u)));
+    return h('div', {class:'wi' + (on ? ' on' : '')},
+      h('button', {class:'wnm', type:'button', disabled: !canWrite, title:'Toca para marcar la cantidad completa', onclick:function () { toggleDay(x, d); }}, x.name.replace(/ \(.*\)/, '')),
+      h('label', {class:'wamt'}, inp, h('span', null, '/ ' + fmtNum(qty) + ' ' + u)));
   }
   function weekGrid(plan) {
     var t = todayStr(), days = weekDays(t);
@@ -1227,7 +1224,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     var kids = [];
     if (!plan) kids.push(empty('Aún no hay plan cargado', 'Cuando Claude cargue el plan de la nutricionista, aquí verás el checklist de lo que debe comer Brownie cada día.'));
     else {
-      kids.push(h('p', {class:'hint'}, 'Toca un casillero para marcarlo, en cualquier día de la semana. En lo que se pesa puedes escribir los gramos que le diste. La pavita y el pescado blanco se alternan, y los suplementos de pocas veces por semana caen en días al azar.'));
+      kids.push(h('p', {class:'hint'}, 'Escribe la cantidad que le diste en cada casillero, en cualquier día de la semana; si tocas el nombre se llena la cantidad completa. La pavita y el pescado blanco se alternan, y los suplementos de pocas veces por semana caen en días al azar.'));
       kids.push(weekGrid(plan));
       var avoid = plan.avoid || [];
       if (avoid.length) kids.push(h('section', {class:'card'}, h('h2', {class:'sect', style:'margin:0 0 6px;color:var(--crit)'}, 'Evitar'),
