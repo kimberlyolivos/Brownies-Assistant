@@ -66,6 +66,9 @@ h1{margin:6px 0 0;font:600 clamp(38px,10vw,56px)/1 var(--f-display);letter-spaci
 .alerts p{margin:0;padding:12px 14px;border-radius:var(--r-sm);font-size:14px;
   background:color-mix(in srgb,var(--crit) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--crit) 30%,var(--line))}
 .alerts b{color:var(--crit)}
+.alerts p{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.alerts .altxt{min-width:0}
+.alerts .linkbtn{flex:none;font-size:12.5px}
 
 .ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .ledger>div{background:var(--surface);padding:14px 16px;min-width:0;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -775,6 +778,11 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
     return ofType(type).filter(function (e) { return lower(det(e).status) === 'pendiente' && e.date >= t; })
       .sort(function (a, b) { return key(a).localeCompare(key(b)); });
   }
+  async function clearAlert(e) {
+    if (!col || !canWrite) return;
+    try { await col.doc(e.id).update({alert:''}); toast('Nota quitada'); }
+    catch (err) { toast('No se pudo quitar. Intenta otra vez.'); }
+  }
   function renderToday() {
     var t = todayStr(), todays = entries.filter(function (e) { return e.date === t; });
     var poop = 0, food = 0, meds = 0, mood = null;
@@ -795,7 +803,8 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
     var ab = $('alerts');
     ab.hidden = al.length === 0;
     ab.replaceChildren.apply(ab, al.map(function (e) {
-      return h('p', null, h('b', null, 'Revisar · ' + fmtLong(e.date) + ': '), (e.title || '') + '. ' + e.alert);
+      return h('p', null, h('span', {class:'altxt'}, h('b', null, 'Revisar · ' + fmtLong(e.date) + ': '), (e.title || '') + '. ' + e.alert),
+        canWrite && e.id ? h('button', {class:'linkbtn', type:'button', title:'Quita esta nota; el registro se queda', onclick:function () { clearAlert(e); }}, 'Quitar nota') : null);
     }));
   }
 
