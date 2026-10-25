@@ -226,6 +226,8 @@ pre.summary{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:400 13px/1
 .nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border:0;background:none;border-radius:20px;font-size:10.5px;font-weight:500;color:var(--ink-2);transition:background .15s,color .15s}
 .nav button[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:700}
 .pawf{fill:currentColor!important;stroke:none!important}
+.petimg{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.avatar,.av{overflow:hidden;padding:0}
 
 /* Alimentación */
 .diet h2{margin:0 0 8px;font:600 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
@@ -877,7 +879,7 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
   }
   function renderHero() {
     var av = $('avatar');
-    if (!av.firstChild) { av.appendChild(svgIcon('paw')); av.addEventListener('click', function () { go('perro'); }); }
+    if (!av.firstChild) { av.appendChild(petPhoto()); av.addEventListener('click', function () { go('perro'); }); }
     var lw = latestOf(function (e) { return e.type === 'weight' && num(det(e).kg) != null; });
     var chips = [['', 'Schnauzer estándar'], ['', '6 años'], ['', 'Hembra esterilizada']];
     if (lw) chips.push(['Peso ', det(lw).kg + ' kg']);
@@ -892,9 +894,14 @@ h1{font:500 clamp(46px,13vw,64px)/.95 var(--f-display);letter-spacing:-.03em}
         svgIcon(it[2]), h('span', null, it[1]));
     })));
   }
+  function petPhoto() {
+    var img = h('img', {src:'brownie.jpg', alt:'Brownie', class:'petimg', decoding:'async'});
+    img.addEventListener('error', function () { img.replaceWith(svgIcon('paw')); });
+    return img;
+  }
   function avatarBtn() {
     var b = h('button', {class:'av', type:'button', 'aria-label':'Mi perro', onclick:function () { go('perro'); }});
-    b.appendChild(svgIcon('paw')); return b;
+    b.appendChild(petPhoto()); return b;
   }
   function plusBtn() {
     var b = h('button', {class:'plus', type:'button', 'aria-label':'Registrar con Claude', onclick:function () { go('chat'); }});
