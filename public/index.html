@@ -221,6 +221,13 @@ body{padding-block:16px 104px}
 .ditem .dq small{display:block;font:400 12px var(--f-body);color:var(--ink-2)}
 .ditem .dq{max-width:46%}
 .dtips{margin:10px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2)}
+.prow{display:flex;align-items:center;gap:8px;padding:5px 0}
+.prow input{height:38px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px;min-width:0}
+.prow input:first-child{flex:1 1 140px}
+.prow input:nth-child(2){flex:0 0 72px;text-align:center}
+.prow span{flex:0 0 52px;font-size:13px;color:var(--ink-2)}
+.pedit summary{cursor:pointer;font-weight:600}
+.pedit .btn{margin-top:10px}
 .todo{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 .todo:first-child{border-top:0}
 .tdchk{padding:6px;border-radius:8px}
@@ -758,7 +765,7 @@ h1{font-weight:700;letter-spacing:-.02em}
   var CHAT_RULES = 'Eres el asistente del diario de salud de Brownie, la perra de Kim (Lima, Perú). Hablas en español, cálido y breve. Tu trabajo es conversar con Kim y registrar en el diario lo que ella cuente, usando la herramienta save_entry. ' +
     'REGLAS: (1) Registra solo lo que Kim dijo; nunca inventes valores ni fechas. (2) Si falta un dato esencial, haz UNA pregunta corta antes de guardar: medicina sin nombre o dosis, examen sin nombre o fecha, popó sin consistencia, comida sin saber qué fue. Si ella ya dio todo, guarda sin preguntar. (3) Fecha y hora: usa los de hoy (abajo) salvo que ella diga otra; hora en formato HH:MM, vacía si no se sabe. (4) No diagnostiques ni cambies dosis. Si hay sangre en la popó, vómitos repetidos, decaimiento fuerte o algo parecido, ponlo en alert (frase corta) y sugiere llamar a la veterinaria. (5) Después de guardar, confirma en una frase lo guardado. (6) Si solo pregunta algo (por ejemplo cómo va el peso o qué examen sigue), responde con los datos del contexto, sin guardar nada. (7) No repitas un registro que ya existe en el contexto. ' +
     'FORMATO de save_entry: type uno de poop, food, mood, med, exam, symptom, weight, vet, other. detail es un objeto con valores cortos. poop: consistency, color, blood (true/false), mucus (true/false), count. food: what, amount, appetite. mood: level 1 a 5. med: name, dose, frequency; para una dosis dada hoy usa kind "dose" (así queda marcada en Medicinas de hoy). exam: status (pendiente, realizado o resultado), lab, result. weight: kg. vet: status, clinic, reason. Textos largos van en note. title es corto (por ejemplo "Popó blanda"). raw es la frase de Kim tal cual. ' +
-    'Porciones de la dieta: si Kim dice que dio la porción N de la ración, guarda type food con detail {what:"Ración de la dieta natural", amount:"1/4 de la ración diaria", meal:N}. Checklist de alimentos: si dio un alimento del plan, guarda type other, title con el nombre del alimento y detail {kind:"check", item:"<id del plan>", what:"<nombre>"}. Si el alimento se mide en gramos o claras y Kim dice cuánto dio, agrega given con ese número (por ejemplo given:60); cada registro suma a lo que ya dio hoy.';
+    'Porciones de la dieta: si Kim dice que dio la porción N de la ración, guarda type food con detail {what:"Ración de la dieta natural", amount:"1/4 de la ración diaria", meal:N}. Cambios del plan de la nutricionista: no los guardes como nota ni como registro; dile a Kim que los cambie en Comida, en “Editar cantidades del plan”. Checklist de alimentos: si dio un alimento del plan, guarda type other, title con el nombre del alimento y detail {kind:"check", item:"<id del plan>", what:"<nombre>"}. Si el alimento se mide en gramos o claras y Kim dice cuánto dio, agrega given con ese número (por ejemplo given:60); cada registro suma a lo que ya dio hoy.';
   function chatContext() {
     var t = todayStr(), now = new Date(), tm = pad(now.getHours()) + ':' + pad(now.getMinutes()), since = addDays(t, -14);
     function clip(v) { v = String(v == null ? '' : v); return v.length > 80 ? v.slice(0, 80) + '…' : v; }
@@ -1283,6 +1290,37 @@ h1{font-weight:700;letter-spacing:-.02em}
     });
     return h('div', {class:'wgrid'}, cols);
   }
+  /* ---------- editar el plan ---------- */
+  var planEditOpen = false, planBusy = false;
+  async function savePlan(plan, rows) {
+    if (!col || !canWrite || planBusy) return;
+    var items = rows.map(function (r) {
+      var q = Number(String(r.q.value).trim().replace(',', '.')), nm = r.n.value.trim() || r.x.name;
+      return Object.assign({}, r.x, {name:nm, qty:isFinite(q) && q > 0 ? q : r.x.qty});
+    });
+    planBusy = true;
+    try {
+      var t = todayStr();
+      await col.add({type:'food', date:t, time:'', title:'Plan de alimentación actualizado', detail:{status:'plan'}, plan:Object.assign({}, plan, {items:items}),
+        note:'', alert:'', raw:'Editado en la página', createdAt:Date.now(), at:t + 'T00:00'});
+      planEditOpen = false; toast('Plan actualizado');
+    } catch (e) { toast('No se pudo guardar. Intenta otra vez.'); }
+    finally { planBusy = false; }
+  }
+  function planEditor(plan) {
+    var rows = planItems(plan).items.map(function (x) {
+      var n = h('input', {type:'text', 'aria-label':'Nombre', maxlength:'60'}), q = h('input', {type:'text', inputmode:'decimal', 'aria-label':'Cantidad de ' + x.name});
+      n.value = x.name; q.value = fmtNum(num(x.qty) || 0);
+      return {x:x, n:n, q:q};
+    });
+    var save = h('button', {class:'btn', type:'button', disabled: !canWrite, onclick:function () { savePlan(plan, rows); }}, 'Guardar plan');
+    var d = h('details', {class:'pedit', open: planEditOpen ? true : null}, h('summary', null, 'Editar cantidades del plan'),
+      h('p', {class:'hint'}, 'Cambia los nombres o las cantidades cuando la nutricionista actualice el plan. Se guarda como un plan nuevo con la fecha de hoy.'),
+      rows.map(function (r) { return h('div', {class:'prow'}, r.n, r.q, h('span', null, unitName(r.x))); }), save);
+    d.addEventListener('toggle', function () { planEditOpen = d.open; });
+    return h('section', {class:'card'}, d);
+  }
+
   function viewFoods() {
     var pe = dietEntry(), plan = pe ? pe.plan : null;
     var kids = [];
@@ -1290,6 +1328,7 @@ h1{font-weight:700;letter-spacing:-.02em}
     else {
       kids.push(h('p', {class:'hint'}, 'Escribe la cantidad que le diste en cada casillero, en cualquier día de la semana; si tocas el nombre se llena la cantidad completa. La pavita y el pescado blanco se alternan, y los suplementos de pocas veces por semana caen en días al azar.'));
       kids.push(weekGrid(plan));
+      kids.push(planEditor(plan));
       var avoid = plan.avoid || [];
       if (avoid.length) kids.push(h('section', {class:'card'}, h('h2', {class:'sect', style:'margin:0 0 6px;color:var(--crit)'}, 'Evitar'),
         avoid.map(function (a) { return h('div', {class:'ditem'}, h('div', {class:'dn'}, h('b', null, a.name), h('small', null, a.why))); })));
