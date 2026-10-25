@@ -28,7 +28,7 @@
   function loginForm(msg) {
     var inp = el('input', {type:'email', placeholder:'tu-correo@ejemplo.com', required:'', autocomplete:'email'});
     var info = el('p', {text: msg || 'Entra con tu correo. Te enviamos un enlace para ingresar, sin contraseña.'});
-    var f = el('form', {}, [el('h1', {text:'Diario de Brownie'}), info, inp, el('button', {type:'submit', text:'Enviarme el enlace'})]);
+    var f = el('form', {}, [el('h1', {text:"Brownie's Assistant"}), info, inp, el('button', {type:'submit', text:'Enviarme el enlace'})]);
     f.onsubmit = function (ev) {
       ev.preventDefault();
       sb.auth.signInWithOtp({email: inp.value.trim(), options:{emailRedirectTo: location.origin + location.pathname}}).then(function (r) {

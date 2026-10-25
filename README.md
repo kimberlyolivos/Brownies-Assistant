@@ -1,4 +1,4 @@
-# Diario de Brownie
+# Brownie's Assistant
 
 Web app para registrar la salud de Brownie (popó, comida, medicinas, exámenes, peso, veterinario) con un chat que registra por ti.
 
